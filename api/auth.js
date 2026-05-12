@@ -1,7 +1,7 @@
 // 导出一个默认的处理函数，用于处理HTTP请求
 export default function handler(req, res) {
  // 定义有效的授权码列表，包含四个预设的授权码
- const validCodes = ['ABC123', 'XYZ789', 'TEST001','123456','78000801'];
+ const validCodes = ['ABC123','XYZ789','TEST001','123456','78000801'];
  
  // 从请求的查询参数中解构获取授权码
  const { code } = req.query;
