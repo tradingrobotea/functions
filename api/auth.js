@@ -1,22 +1,12 @@
-export default function handler(req, res) {
- const { code, account } = req.query;
+export async function onRequest(context) {
+  const url = new URL(context.request.url);
+  const code = url.searchParams.get("code");
 
- const users = {
-   "123456": {
-     account: 78000801,
-     expire: "2026-12-31"
-   }
- };
+  const validCodes = ["123456", "ABC123"];
 
- if (!users[code]) {
-   return res.status(401).json({
-     status: "unauthorized"
-   });
- }
+  if (validCodes.includes(code)) {
+    return new Response("OK");
+  }
 
- res.status(200).json({
-   status: "ok",
-   account: users[code].account,
-   expire: users[code].expire
- });
+  return new Response("FAIL", { status: 401 });
 }
