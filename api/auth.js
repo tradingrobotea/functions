@@ -5,9 +5,9 @@ export async function onRequest(context) {
   //========================
   // 获取参数
   //========================
-  const code = url.searchParams.get("code") || "";
-  const account = url.searchParams.get("account") || "";
-  const server = url.searchParams.get("server") || "";
+  const code = url.searchParams.get("code") "";
+  //const account = url.searchParams.get("account") || "";
+  //const server = url.searchParams.get("server") || "";
 
   //========================
   // 模拟数据库（你后面可换成KV / D1 / Mongo）
