@@ -1,17 +1,10 @@
 // netlify/functions/config.js
-// 功能：向EA下发云端配置（symbol/buy/sell/tradeEnable/sl/tp 等）
-// 访问地址：/.netlify/functions/config?account=xxx&code=yyy
-// 方法：GET
-//
-// 优先级：
-//   1. Netlify Blobs 中是否有针对该账号的个性化配置 → 优先使用
-//   2. 否则回落到默认全局配置
+// 功能：向 EA 下发云端配置
+// 访问：GET /.netlify/functions/config?account=xxx&code=yyy
+// 优先级：账号级配置 > 全局覆盖配置 > 代码默认值
 
-import { getStore } from "@netlify/blobs";
+const { getStore } = require("@netlify/blobs");
 
-// ============================================================
-// 授权码列表（与 auth.js 保持一致）
-// ============================================================
 const CODE_LIST = [
   { code: "123456", expire: "2026-06-30" },
   { code: "3456",   expire: "2026-08-01" },
@@ -23,9 +16,7 @@ const ACCOUNT_LIST = [
   { account: "88888888", expire: "2026-12-31" },
 ];
 
-// ============================================================
-// 全局默认配置（当Blobs中无个性化配置时使用）
-// ============================================================
+// 代码内默认值（最低优先级）
 const GLOBAL_CONFIG = {
   symbol:             "XAUUSD",
   buy:                true,
@@ -44,10 +35,18 @@ const CORS = {
   "Access-Control-Allow-Origin": "*",
 };
 
-// ============================================================
-// Handler
-// ============================================================
-export async function handler(event) {
+function respond(statusCode, body) {
+  return { statusCode, headers: CORS, body: JSON.stringify(body) };
+}
+
+function isAuthorized(code, account) {
+  const now = new Date();
+  const codeOk    = CODE_LIST.some(i => i.code === code && now <= new Date(i.expire));
+  const accountOk = ACCOUNT_LIST.some(i => i.account === account && now <= new Date(i.expire));
+  return codeOk || accountOk;
+}
+
+exports.handler = async function (event) {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: CORS, body: "" };
   }
@@ -55,66 +54,31 @@ export async function handler(event) {
   const params  = event.queryStringParameters || {};
   const code    = (params.code    || "").trim();
   const account = (params.account || "").trim();
-  const now     = new Date();
 
-  // ----------------------------------------------------------
-  // 授权检查
-  // ----------------------------------------------------------
-  const codeOk = CODE_LIST.some(
-    item => item.code === code && now <= new Date(item.expire)
-  );
-  const accountOk = ACCOUNT_LIST.some(
-    item => item.account === account && now <= new Date(item.expire)
-  );
-
-  if (!codeOk && !accountOk) {
+  if (!isAuthorized(code, account)) {
     return respond(403, { status: "error", message: "unauthorized" });
   }
 
-  // ----------------------------------------------------------
-  // 从 Blobs 读取该账号的个性化配置（若存在）
-  // key 格式：config/{accountId}  或  config/global
-  // ----------------------------------------------------------
+  // 从 Blobs 叠加配置
   let config = { ...GLOBAL_CONFIG };
-
   try {
     const store = getStore("account-data");
 
-    // 先尝试账号级别配置
-    let customConfig = null;
-    if (account) {
-      customConfig = await store.get(`config/${account}`, { type: "json" }).catch(() => null);
-    }
-
-    // 再尝试全局覆盖配置
     const globalOverride = await store.get("config/global", { type: "json" }).catch(() => null);
-
-    // 合并：全局覆盖 → 账号级别（账号级别优先级最高）
     if (globalOverride) config = { ...config, ...globalOverride };
-    if (customConfig)   config = { ...config, ...customConfig };
 
+    if (account) {
+      const customConfig = await store.get(`config/${account}`, { type: "json" }).catch(() => null);
+      if (customConfig) config = { ...config, ...customConfig };
+    }
   } catch (err) {
-    console.warn("[config] Blob读取异常（将使用默认配置）:", err.message);
+    console.warn("[config] Blob读取异常，使用默认配置:", err.message);
   }
 
-  // ----------------------------------------------------------
-  // 返回配置给EA
-  // ----------------------------------------------------------
   return respond(200, {
     status:    "ok",
     account:   account || "unknown",
     updatedAt: new Date().toISOString(),
     ...config,
   });
-}
-
-// ============================================================
-// 辅助
-// ============================================================
-function respond(statusCode, body) {
-  return {
-    statusCode,
-    headers: CORS,
-    body: JSON.stringify(body),
-  };
-}
+};
